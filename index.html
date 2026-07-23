@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Austin Parcel Atlas — live from the parcel database</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  :root{
+    --ink:#241E2B; --muted:#6A6274; --panel:rgba(255,255,255,.82); --panel-brd:rgba(36,30,43,.10);
+    --accent:#7A4593; --chip:#F2ECF5; --chip-on:#7A4593;
+    --r1:#EFE9F2;--r2:#D6C2E4;--r3:#BB97D2;--r4:#9A67B7;--r5:#713F8E;--r6:#4A2668;--nd:#D6D2DB;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,ui-serif,serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --ink:#EEE8F1; --muted:#A79DB0; --panel:rgba(26,21,34,.80); --panel-brd:rgba(238,232,241,.12);
+      --accent:#C39AE0; --chip:#2A2033; --chip-on:#7A4593; --nd:#3A333F; }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:var(--sans);color:var(--ink);}
+  #map{position:absolute;inset:0;}
+  .maplibregl-popup{max-width:260px!important;}
+  .maplibregl-popup-content{font-family:var(--sans);border-radius:12px;padding:11px 13px;
+    box-shadow:0 8px 30px rgba(30,15,45,.28);background:var(--panel);backdrop-filter:blur(10px);
+    border:1px solid var(--panel-brd);color:var(--ink);}
+  .maplibregl-popup-tip{display:none;}
+  .pop-z{font-family:var(--mono);font-weight:600;font-size:13px;letter-spacing:.02em;margin-bottom:5px;}
+  .pop-row{display:flex;justify-content:space-between;gap:18px;font-size:12.5px;
+    font-variant-numeric:tabular-nums;line-height:1.5;}
+  .pop-row .k{color:var(--muted);}
+
+  .panel{position:absolute;top:16px;left:16px;z-index:5;width:min(340px,calc(100vw - 32px));
+    background:var(--panel);backdrop-filter:blur(14px);border:1px solid var(--panel-brd);
+    border-radius:16px;box-shadow:0 10px 40px rgba(30,15,45,.18);padding:18px 18px 16px;}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--accent);font-weight:600;margin:0 0 8px;}
+  .panel h1{font-family:var(--serif);font-weight:600;font-size:22px;line-height:1.1;margin:0 0 6px;
+    letter-spacing:-.01em;}
+  .panel .desc{font-size:12.7px;color:var(--muted);margin:0 0 14px;line-height:1.5;}
+  .panel .desc b{color:var(--ink);font-weight:600;}
+  .toggle{display:flex;background:var(--chip);border-radius:10px;padding:3px;gap:2px;margin-bottom:14px;}
+  .toggle button{flex:1;font-family:var(--sans);font-size:12.5px;font-weight:500;color:var(--muted);
+    background:transparent;border:0;padding:7px 8px;border-radius:8px;cursor:pointer;transition:.15s;}
+  .toggle button[aria-pressed="true"]{background:var(--chip-on);color:#fff;font-weight:600;}
+  .toggle button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .legend-title{font-size:11px;color:var(--muted);margin:0 0 7px;text-transform:uppercase;letter-spacing:.06em;}
+  .legend{display:flex;flex-direction:column;gap:4px;font-family:var(--mono);font-size:11px;
+    color:var(--muted);font-variant-numeric:tabular-nums;}
+  .legend .row{display:flex;align-items:center;gap:8px;}
+  .legend .sw{width:26px;height:12px;border-radius:3px;flex:none;}
+  .foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--panel-brd);font-size:11px;
+    color:var(--muted);line-height:1.5;}
+  .foot .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#3fae6b;
+    margin-right:6px;vertical-align:baseline;}
+  .maplibregl-ctrl-attrib{font-size:10px;}
+  @media (max-width:520px){ .panel{top:8px;left:8px;padding:15px;} .panel h1{font-size:19px;} }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="panel">
+  <p class="eyebrow">Austin parcel database</p>
+  <h1>Austin Parcel Atlas</h1>
+  <p class="desc">Every ZIP shaded by its property data — pulled <b>live</b> from the Supabase
+    database (<span id="pcount">375,210</span> parcels). Hover an area; switch the metric below.</p>
+  <div class="toggle" role="group" aria-label="Metric">
+    <button id="b-val" aria-pressed="true">Avg value</button>
+    <button id="b-cnt" aria-pressed="false">Parcel count</button>
+  </div>
+  <p class="legend-title" id="leg-title">Average appraised value per parcel</p>
+  <div class="legend" id="legend"></div>
+  <div class="foot"><span class="dot"></span><span id="status">Connecting to database…</span></div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+const SUPA_URL="https://aqbyxpiwugcvoephsvpm.supabase.co";
+const SUPA_KEY="sb_publishable_QMWSj0CLYe3k3XSGCsWOhw_5RsI-nmN";
+
+const dark=matchMedia("(prefers-color-scheme: dark)").matches;
+const RAMP=["#EFE9F2","#D6C2E4","#BB97D2","#9A67B7","#713F8E","#4A2668"];
+const GREY=dark?"#3A333F":"#D6D2DB";
+const base=dark?"dark_all":"light_all";
+
+// metric definitions: breaks + human labels for the legend
+const METRICS={
+  val:{prop:"avg_value", title:"Average appraised value per parcel",
+       breaks:[700000,900000,1100000,1500000,3000000],
+       fmt:v=>v>=1e6?"$"+(v/1e6).toFixed(v>=1e7?0:1)+"M":"$"+Math.round(v/1e3)+"k",
+       zero:f=>f.avg_value==null},
+  cnt:{prop:"parcels", title:"Parcels per ZIP",
+       breaks:[2000,4000,7000,9500,12000],
+       fmt:v=>v.toLocaleString("en-US"),
+       zero:f=>!f.parcels}
+};
+function colorExpr(m){
+  const step=["step",["get",m.prop],RAMP[0]];
+  m.breaks.forEach((b,i)=>{step.push(b,RAMP[i+1]);});
+  const guard = m.prop==="avg_value"
+    ? ["==",["get","avg_value"],null]
+    : ["<=",["coalesce",["get","parcels"],0],0];
+  return ["case",guard,GREY,step];
+}
+function legendFor(m){
+  const lo=m.prop==="avg_value"?485992:1, hi=m.prop==="avg_value"?166246402:15684;
+  const stops=[lo,...m.breaks,hi];
+  const el=document.getElementById("legend"); el.innerHTML="";
+  for(let i=0;i<6;i++){
+    const r=document.createElement("div"); r.className="row";
+    r.innerHTML=`<span class="sw" style="background:${RAMP[i]}"></span>${m.fmt(stops[i])} – ${m.fmt(stops[i+1])}`;
+    el.appendChild(r);
+  }
+  const nd=document.createElement("div"); nd.className="row";
+  nd.innerHTML=`<span class="sw" style="background:${GREY}"></span>no data`;
+  el.appendChild(nd);
+  document.getElementById("leg-title").textContent=m.title;
+}
+
+const map=new maplibregl.Map({
+  container:"map",
+  style:{version:8,
+    sources:{carto:{type:"raster",
+      tiles:[`https://a.basemaps.cartocdn.com/${base}/{z}/{x}/{y}.png`,
+             `https://b.basemaps.cartocdn.com/${base}/{z}/{x}/{y}.png`,
+             `https://c.basemaps.cartocdn.com/${base}/{z}/{x}/{y}.png`],
+      tileSize:256, attribution:'© OpenStreetMap contributors © CARTO'}},
+    layers:[{id:"base",type:"raster",source:"carto"}]},
+  center:[-97.79,30.30], zoom:9.3, attributionControl:false
+});
+map.addControl(new maplibregl.AttributionControl({compact:true,
+  customAttribution:'Parcels: Travis County TCAD / City of Austin · via Supabase'}),"bottom-right");
+map.addControl(new maplibregl.NavigationControl({showCompass:false}),"bottom-right");
+
+let current=METRICS.val;
+const popup=new maplibregl.Popup({closeButton:false,closeOnClick:false});
+
+async function load(){
+  const status=document.getElementById("status");
+  try{
+    const res=await fetch(`${SUPA_URL}/rest/v1/rpc/zip_value_geojson`,{
+      method:"POST",
+      headers:{apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY,"Content-Type":"application/json"},
+      body:"{}"
+    });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const fc=await res.json();
+
+    const total=fc.features.reduce((s,f)=>s+(f.properties.parcels||0),0);
+    document.getElementById("pcount").textContent=total.toLocaleString("en-US");
+    status.innerHTML='Live · '+fc.features.length+' ZIP areas · '+total.toLocaleString("en-US")+' parcels';
+
+    map.addSource("zips",{type:"geojson",data:fc});
+    map.addLayer({id:"zip-fill",type:"fill",source:"zips",
+      paint:{"fill-color":colorExpr(current),"fill-opacity":0.80}});
+    map.addLayer({id:"zip-line",type:"line",source:"zips",
+      paint:{"line-color":dark?"#141019":"#ffffff","line-width":0.6,"line-opacity":0.7}});
+    map.addLayer({id:"zip-hi",type:"line",source:"zips",
+      paint:{"line-color":dark?"#C39AE0":"#7A4593","line-width":2.4},filter:["==","zipcode",""]});
+    legendFor(current);
+
+    map.on("mousemove","zip-fill",e=>{
+      const f=e.features[0], p=f.properties;
+      map.setFilter("zip-hi",["==","zipcode",p.zipcode]);
+      map.getCanvas().style.cursor="pointer";
+      const val=p.avg_value==null?"—":METRICS.val.fmt(+p.avg_value);
+      popup.setLngLat(e.lngLat).setHTML(
+        `<div class="pop-z">ZIP ${p.zipcode}</div>
+         <div class="pop-row"><span class="k">Avg value</span><span>${val}</span></div>
+         <div class="pop-row"><span class="k">Parcels</span><span>${(+p.parcels).toLocaleString("en-US")}</span></div>`
+      ).addTo(map);
+    });
+    map.on("mouseleave","zip-fill",()=>{
+      map.setFilter("zip-hi",["==","zipcode",""]);
+      map.getCanvas().style.cursor=""; popup.remove();
+    });
+
+    try{ map.fitBounds([[-98.13,30.02],[-97.53,30.55]],{padding:{top:30,right:30,bottom:30,left:360},duration:0}); }catch(_){}
+  }catch(err){
+    status.textContent="Couldn't reach the database ("+err.message+"). Try a refresh.";
+    status.previousElementSibling.style.background="#d9534f";
+  }
+}
+map.on("load",load);
+
+function setMetric(m,btnOn,btnOff){
+  current=m;
+  btnOn.setAttribute("aria-pressed","true"); btnOff.setAttribute("aria-pressed","false");
+  if(map.getLayer("zip-fill")) map.setPaintProperty("zip-fill","fill-color",colorExpr(m));
+  legendFor(m);
+}
+const bv=document.getElementById("b-val"), bc=document.getElementById("b-cnt");
+bv.onclick=()=>setMetric(METRICS.val,bv,bc);
+bc.onclick=()=>setMetric(METRICS.cnt,bc,bv);
+</script>
+</body>
+</html>
