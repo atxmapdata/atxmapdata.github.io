@@ -97,8 +97,12 @@ Existing `public` objects are **untouched**. New work adds:
   `parcels` cursors show **incomplete** (`streets` offset 26000/28000; `parcels` `completed:false`
   at `next_offset=4000` **despite 375k rows present** → parcels were bulk-loaded by a different
   path; the cursor is likely vestigial — **verify before relying on it**).
-- **Action:** create `cron.job` entries for the loaders that should run on a cadence (they are
-  currently unscheduled), and record the schedules here.
+- **Scheduled 2026-07-23** (`db/cron/civic_pipeline.sql`): a `public.pipeline_tick()` orchestrator
+  advances every incomplete loader/joiner one page per call (parcels excluded), wired to
+  `cron.schedule('civic_pipeline_tick', '*/2 * * * *', …)`. It drove the outstanding `streets`
+  backfill to completion (`done at offset=70000`, 18:50 UTC); all loaders/joiners are now
+  `completed=true`, so the tick is a ~0.0s self-idling no-op. No recurring refresh yet — the
+  steppers are one-and-done; a commented weekly cursor-reset job in that file is the opt-in path.
 
 ## New work (genuinely greenfield)
 - **Live (GTFS-rt):** CapMetro VehiclePositions protobuf → decode (`gtfs-realtime-bindings`) →
