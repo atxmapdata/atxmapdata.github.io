@@ -112,12 +112,13 @@ Fresh audit on the correct DB. **Decision 2026-07-23:** the project is open-sour
 and the site is public read-only, so **public READ of civic reference data is accepted and
 intended** — RLS is not needed merely to hide it. The one worthwhile hardening is **blocking
 anonymous WRITES**: the anon key ships in the public site JS, and on a table with RLS disabled the
-`anon` role can also INSERT/UPDATE/DELETE. Recommended (optional; review before applying): enable
-RLS + a permissive `SELECT`-only policy (`using (true)`) on the four exposed tables — this leaves
-reads exactly as they are today and only closes the write hole. Everything below is informational.
-- **RLS disabled on PostgREST-exposed tables (ERROR):** `flood_zones`, `overlay_watershed`,
-  `overlay_jurisdiction`, `zip_codes` (+ `spatial_ref_sys`, a PostGIS system table). Anon key can
-  read these. Decide intended public-read policy per table before enabling RLS + adding a policy.
+`anon` role can also INSERT/UPDATE/DELETE. **Applied 2026-07-23** (migration
+`enable_rls_read_only_public_reference_tables`): enabled RLS + a permissive `SELECT`-only policy
+(`using (true)`) on the four exposed tables — reads unchanged, anonymous writes now blocked.
+Everything below is informational.
+- **RLS disabled on PostgREST-exposed tables (ERROR → ✅ RESOLVED 2026-07-23):** `flood_zones`,
+  `overlay_watershed`, `overlay_jurisdiction`, `zip_codes` now have RLS + read-only policies
+  (reads unchanged, writes blocked). `spatial_ref_sys` (PostGIS system table) intentionally left as-is.
 - **SECURITY DEFINER view (ERROR):** `parcel_zoning_bases`.
 - **Anon/authenticated-executable SECURITY DEFINER functions (WARN):** `parcel_demographics`,
   `parcel_market_context`, `parcel_value_context`, `parcel_value_history`, `st_estimatedextent*`
