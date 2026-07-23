@@ -97,11 +97,11 @@ const METRICS={
        zero:f=>!f.parcels}
 };
 function colorExpr(m){
-  const step=["step",["get",m.prop],RAMP[0]];
+  // step always receives a number (coalesce guards the one no-parcel ZIP).
+  const step=["step",["coalesce",["get",m.prop],0],RAMP[0]];
   m.breaks.forEach((b,i)=>{step.push(b,RAMP[i+1]);});
-  const guard = m.prop==="avg_value"
-    ? ["==",["get","avg_value"],null]
-    : ["<=",["coalesce",["get","parcels"],0],0];
+  // parcels==0 <=> no value data, so this one guard covers both metrics.
+  const guard=["<=",["coalesce",["get","parcels"],0],0];
   return ["case",guard,GREY,step];
 }
 function legendFor(m){
