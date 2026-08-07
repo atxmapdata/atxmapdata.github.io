@@ -1,0 +1,30 @@
+# Edited from Windows (CRLF) and WSL Ubuntu (LF). Without this, saves from
+# the other side rewrite whole files and bury real changes in the noise.
+
+* text=auto eol=lf
+
+# Windows batch files genuinely need CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary — never line-ending converted.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.mp4  binary
+*.webm binary
+*.mp3  binary
+*.m4a  binary
+*.wav  binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.otf  binary
+*.pdf  binary
+*.keystore binary
+*.jks  binary
+*.pmtiles binary
+*.mbtiles binary
